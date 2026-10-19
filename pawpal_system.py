@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
+from itertools import combinations
 
 # Lower number = more important. Used to rank Task.priority strings.
 PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 # How often a task repeats.
 FREQUENCIES = ("once", "daily", "weekly")
+
+# How far ahead the next copy of a recurring task is due.
+RECURRENCE_INTERVALS = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
 
 
 @dataclass
@@ -103,6 +107,9 @@ class Scheduler:
 
     def sort_by_time(self) -> list[Task]:
         """Return all tasks sorted by due time."""
+        # due_time is a datetime, so it sorts by date and time directly. Times
+        # stored as "HH:MM" strings would also sort correctly with the same key,
+        # as long as they are zero-padded ("08:00", not "8:00").
         return sorted(self.owner.get_all_tasks(), key=lambda task: task.due_time)
 
     def filter_tasks(
@@ -116,24 +123,50 @@ class Scheduler:
             and (completed is None or task.completed == completed)
         ]
 
-    def detect_conflicts(self) -> list[str]:
-        """Return warning messages for tasks whose times overlap."""
-        # Sorted by time, so each task only needs checking against the tasks
-        # that start before it ends, instead of every pair.
-        tasks = sorted(self._pending_tasks(None), key=lambda task: task.due_time)
+    def mark_task_complete(self, task: Task) -> Task | None:
+        """Complete a task and, if it repeats, add its next occurrence to the same pet."""
+        if task.completed:
+            return None  # already done, so don't create a duplicate next copy
+        # Find the pet that owns this exact task object.
+        pet = next(
+            (p for p in self.owner.pets if any(t is task for t in p.tasks)), None
+        )
+        if pet is None:
+            raise ValueError(f"'{task.description}' doesn't belong to any of this owner's pets")
+
+        task.mark_complete()
+        interval = RECURRENCE_INTERVALS.get(task.frequency)
+        if interval is None:
+            return None  # "once" tasks don't repeat
+        next_task = replace(task, due_time=task.due_time + interval, completed=False)
+        pet.add_task(next_task)
+        return next_task
+
+    def detect_conflicts(self, day: date | None = None) -> list[str]:
+        """Return warning messages for unfinished tasks whose times overlap, optionally on one day."""
+        # Sorted by time, so in each pair task_b never starts before task_a.
+        # They clash if task_b starts before task_a ends. This checks every
+        # pair, which is simple and plenty fast for a day of pet tasks.
+        tasks = sorted(self._pending_tasks(day), key=lambda task: task.due_time)
         warnings = []
-        for i, task_a in enumerate(tasks):
-            end_a = self._end_time(task_a)
-            for task_b in tasks[i + 1 :]:
-                if task_b.due_time >= end_a:
-                    break
-                warnings.append(
-                    f"{task_a.pet_name}'s '{task_a.description}' "
-                    f"({task_a.due_time:%H:%M}-{end_a:%H:%M}) overlaps "
-                    f"{task_b.pet_name}'s '{task_b.description}' "
-                    f"({task_b.due_time:%H:%M}-{self._end_time(task_b):%H:%M})"
-                )
+        for task_a, task_b in combinations(tasks, 2):
+            if task_b.due_time < self._end_time(task_a):
+                warnings.append(self._conflict_message(task_a, task_b))
         return warnings
+
+    def _conflict_message(self, task_a: Task, task_b: Task) -> str:
+        """Describe how two overlapping tasks clash."""
+        relation = (
+            "is at the same time as"
+            if task_a.due_time == task_b.due_time
+            else "overlaps"
+        )
+        return (
+            f"{task_a.pet_name}'s '{task_a.description}' "
+            f"({task_a.due_time:%H:%M}-{self._end_time(task_a):%H:%M}) {relation} "
+            f"{task_b.pet_name}'s '{task_b.description}' "
+            f"({task_b.due_time:%H:%M}-{self._end_time(task_b):%H:%M})"
+        )
 
     def generate_daily_plan(self, day: date | None = None) -> list[Task]:
         """Pick the highest-priority tasks that fit in the owner's available minutes."""
@@ -180,7 +213,7 @@ class Scheduler:
                 f"{task.duration_minutes} min but only {minutes_left} were left."
             )
 
-        conflicts = self.detect_conflicts()
+        conflicts = self.detect_conflicts(day)
         if conflicts:
             lines.append("Warnings:")
             lines.extend(f"- {warning}" for warning in conflicts)

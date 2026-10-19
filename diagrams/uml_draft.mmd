@@ -32,7 +32,9 @@ classDiagram
         -_pending_tasks(date day) list
         +sort_by_time() list
         +filter_tasks(str pet_name, bool completed) list
-        +detect_conflicts() list
+        +mark_task_complete(Task task) Task
+        +detect_conflicts(date day) list
+        -_conflict_message(Task task_a, Task task_b) str
         +generate_daily_plan(date day) list
         +explain_plan(list plan, date day) str
     }
@@ -40,3 +42,4 @@ classDiagram
     Owner "1" o-- "*" Pet : owns
     Pet "1" *-- "*" Task : has
     Scheduler --> Owner : plans for
+    Scheduler ..> Task : completes and creates next occurrence

@@ -42,6 +42,9 @@
     - It picks tasks highest priority first and doesn't go back to rethink its choices. So a long medium-priority task can get skipped while a shorter low-priority one still fits. In my demo, "Litter box clean" (45 min) got skipped but "Brushing" (15 min) made it in.
 - Why is that tradeoff reasonable for this scenario?
     - It's simple and easy to explain, and the high-priority tasks always get in first. For a handful of pet tasks a day, finding the perfect combination isn't worth the extra complexity.
+- Another tradeoff: readability vs. speed in conflict detection.
+    - My first `detect_conflicts()` used nested loops that stopped early once tasks couldn't overlap anymore. When I asked AI to simplify it, it suggested `itertools.combinations` to check every pair of tasks, plus moving the warning text into a helper. It also offered an even shorter one-line list comprehension.
+    - I picked the `combinations` loop with the helper. It checks every pair instead of stopping early, so it's technically slower, but it's much easier to read. A pet owner only has a few dozen tasks a day, so the speed difference doesn't matter. I skipped the one-liner because it was harder to read and debug. All my tests still passed after the change, and it also checks overlapping durations, not just exact time matches.
 
 ---
 

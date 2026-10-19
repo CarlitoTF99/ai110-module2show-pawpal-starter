@@ -81,7 +81,7 @@ else:
             format_func=lambda i: f"{owner.pets[i].name} ({owner.pets[i].species})",
         )
         description = st.text_input("Task description", value="Morning walk")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             due = st.time_input("Due time", value=time(8, 0))
         with col2:
@@ -90,6 +90,8 @@ else:
             )
         with col3:
             priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
+        with col4:
+            frequency = st.selectbox("Repeats", ["once", "daily", "weekly"])
         if st.form_submit_button("Add task"):
             if not description.strip():
                 st.error("Please enter a task description.")
@@ -101,31 +103,86 @@ else:
                         datetime.combine(date.today(), due),
                         int(duration),
                         priority,
+                        frequency,
                     )
                 )
                 st.success(f"Added '{description.strip()}' for {pet.name}.")
 
-st.subheader("Current pets and tasks")
+scheduler = Scheduler(owner)
+today = date.today()
+
+st.subheader("Pets")
 if not owner.pets:
     st.info("No pets yet. Add one above.")
-for pet in owner.pets:
-    st.markdown(f"**{pet.name}** ({pet.species})")
-    tasks = pet.get_tasks()
-    if tasks:
+else:
+    st.table(
+        [
+            {"pet": pet.name, "species": pet.species, "tasks": len(pet.get_tasks())}
+            for pet in owner.pets
+        ]
+    )
+
+st.subheader("Tasks")
+if not owner.get_all_tasks():
+    st.info("No tasks yet. Add one above.")
+else:
+    # Mark a task done. Daily/weekly tasks get their next occurrence added.
+    pending = sorted(scheduler.filter_tasks(completed=False), key=lambda t: t.due_time)
+    if pending:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            to_complete = st.selectbox(
+                "Mark a task done",
+                range(len(pending)),
+                format_func=lambda i: (
+                    f"{pending[i].due_time:%a %H:%M} - {pending[i].pet_name}: "
+                    f"{pending[i].description}"
+                ),
+            )
+        with col2:
+            st.write("")  # line the button up with the dropdown
+            if st.button("Mark done"):
+                task = pending[to_complete]
+                next_task = scheduler.mark_task_complete(task)
+                if next_task:
+                    st.success(
+                        f"Done! Next '{next_task.description}' for {next_task.pet_name} "
+                        f"added for {next_task.due_time:%a %b %d at %H:%M} ({task.frequency})."
+                    )
+                else:
+                    st.success(f"Done! '{task.description}' doesn't repeat.")
+
+    # Filter with Scheduler.filter_tasks(), then sort by time.
+    col1, col2 = st.columns(2)
+    with col1:
+        pet_filter = st.selectbox("Show pet", ["All pets"] + [pet.name for pet in owner.pets])
+    with col2:
+        status_filter = st.selectbox("Show status", ["To do", "Done", "All"])
+    shown = scheduler.filter_tasks(
+        pet_name=None if pet_filter == "All pets" else pet_filter,
+        completed={"To do": False, "Done": True, "All": None}[status_filter],
+    )
+    shown = sorted(shown, key=lambda t: t.due_time)
+    if shown:
         st.table(
             [
                 {
-                    "time": f"{task.due_time:%H:%M}",
+                    "when": f"{task.due_time:%a %H:%M}",
+                    "pet": task.pet_name,
                     "task": task.description,
                     "minutes": task.duration_minutes,
                     "priority": task.priority,
-                    "done": task.completed,
+                    "repeats": task.frequency,
+                    "done": "yes" if task.completed else "no",
                 }
-                for task in tasks
+                for task in shown
             ]
         )
     else:
-        st.caption("No tasks yet.")
+        st.caption("No tasks match these filters.")
+
+    for warning in scheduler.detect_conflicts(today):
+        st.warning(f"Time conflict today: {warning}")
 
 st.divider()
 
@@ -135,8 +192,7 @@ st.caption(
 )
 
 if st.button("Generate schedule"):
-    scheduler = Scheduler(owner)
-    plan = scheduler.generate_daily_plan(date.today())
+    plan = scheduler.generate_daily_plan(today)
     if plan:
         used = sum(task.duration_minutes for task in plan)
         st.success(
@@ -158,4 +214,4 @@ if st.button("Generate schedule"):
     else:
         st.warning("No tasks fit today's plan. Add tasks or increase your available minutes.")
     with st.expander("Why this plan?"):
-        st.text(scheduler.explain_plan(plan, date.today()))
+        st.text(scheduler.explain_plan(plan, today))
