@@ -32,12 +32,16 @@
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+    - It looks at how many minutes the owner has that day, each task's priority (high, medium, low), and the task's due time. It skips tasks that are already done or aren't due today, and it warns me if two tasks overlap.
 - How did you decide which constraints mattered most?
+    - Time and priority mattered most, because a busy owner can't do everything, so the important stuff like meds and walks has to come first. Due time is used to break ties and to put the final plan in order.
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+    - It picks tasks highest priority first and doesn't go back to rethink its choices. So a long medium-priority task can get skipped while a shorter low-priority one still fits. In my demo, "Litter box clean" (45 min) got skipped but "Brushing" (15 min) made it in.
 - Why is that tradeoff reasonable for this scenario?
+    - It's simple and easy to explain, and the high-priority tasks always get in first. For a handful of pet tasks a day, finding the perfect combination isn't worth the extra complexity.
 
 ---
 
