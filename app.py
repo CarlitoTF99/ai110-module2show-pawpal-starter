@@ -9,36 +9,35 @@ st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 st.title("🐾 PawPal+")
 
 st.markdown(
-    """
-Welcome to the PawPal+ starter app.
-
-This file is intentionally thin. It gives you a working Streamlit app so you can start quickly,
-but **it does not implement the project logic**. Your job is to design the system and build it.
-
-Use this app as your interactive demo once your backend classes/functions exist.
-"""
+    "A pet care planner for busy owners. Add your pets and their care tasks, "
+    "and PawPal+ builds today's plan around the time you have."
 )
 
-with st.expander("Scenario", expanded=True):
+with st.expander("How it works"):
     st.markdown(
         """
-**PawPal+** is a pet care planning assistant. It helps a pet owner plan care tasks
-for their pet(s) based on constraints like time, priority, and preferences.
-
-You will design and implement the scheduling logic and connect it to this Streamlit UI.
+1. Enter your name and how many minutes you have for pet care today.
+2. Add your pets, then give each one tasks with a time, duration, priority, and how often it repeats.
+3. Filter and sort your tasks, and mark them done. Daily and weekly tasks automatically get their next one added.
+4. Generate today's schedule. PawPal+ picks the highest-priority tasks that fit your time,
+   warns you about overlapping tasks, and explains its choices.
 """
     )
 
-with st.expander("What you need to build", expanded=True):
-    st.markdown(
-        """
-At minimum, your system should:
-- Represent pet care tasks (what needs to happen, how long it takes, priority)
-- Represent the pet and the owner (basic info and preferences)
-- Build a plan/schedule for a day that chooses and orders tasks based on constraints
-- Explain the plan (why each task was chosen and when it happens)
-"""
+
+def show_conflicts(conflicts: list[str]) -> None:
+    """Show all time conflicts as one warning with a tip on how to fix them."""
+    if not conflicts:
+        return
+    count = len(conflicts)
+    lines = "\n".join(f"- {conflict}" for conflict in conflicts)
+    st.warning(
+        f"**⚠️ {count} time conflict{'s' if count != 1 else ''} today**\n\n"
+        f"{lines}\n\n"
+        "Tip: you can't be in two places at once. Move one task to a different "
+        "time, or mark one done if it's already handled."
     )
+
 
 st.divider()
 
@@ -181,8 +180,7 @@ else:
     else:
         st.caption("No tasks match these filters.")
 
-    for warning in scheduler.detect_conflicts(today):
-        st.warning(f"Time conflict today: {warning}")
+    show_conflicts(scheduler.detect_conflicts(today))
 
 st.divider()
 
@@ -213,5 +211,23 @@ if st.button("Generate schedule"):
         )
     else:
         st.warning("No tasks fit today's plan. Add tasks or increase your available minutes.")
+
+    planned = {id(task) for task in plan}
+    skipped = [
+        task
+        for task in scheduler.filter_tasks(completed=False)
+        if task.due_time.date() == today and id(task) not in planned
+    ]
+    if skipped:
+        st.info(
+            "**Didn't fit today:** "
+            + ", ".join(
+                f"{task.description} ({task.pet_name}, {task.duration_minutes} min)"
+                for task in sorted(skipped, key=lambda t: t.due_time)
+            )
+            + ". Add more minutes to fit them in."
+        )
+    show_conflicts(scheduler.detect_conflicts(today))
+
     with st.expander("Why this plan?"):
         st.text(scheduler.explain_plan(plan, today))
