@@ -137,41 +137,41 @@ Mon 08:00 AM  Morning walk       Rex   daily   [todo]
 
 ## 🧪 Testing PawPal+
 
-```bash
-# Run the full test suite:
-pytest
+Run the tests from the project folder:
 
-# Run with coverage:
-pytest --cov
+```bash
+python -m pytest
 ```
 
-Sample test output:
+The suite in `tests/test_pawpal.py` has 29 tests covering both normal use ("happy paths") and edge cases:
+
+- **Sorting:** tasks added out of order come back in time order; no tasks gives an empty list.
+- **Filtering:** by pet (any capitalization), by done/not done, both together, and a pet with no tasks.
+- **Recurring tasks:** completing a daily task creates one for the next day, and a weekly task one for 7 days later. Oct 31 rolls over to Nov 1. "Once" tasks don't repeat, completing twice doesn't create duplicates, and a task from another owner raises an error.
+- **Conflict detection:** two tasks at the exact same time are flagged, as are overlapping tasks for the same pet. Back-to-back tasks, completed tasks, other days and an empty schedule produce no warnings.
+- **Daily plan:** high priority is picked first within the available minutes; completed tasks and other days are skipped; nothing fitting gives an empty plan; the explanation lists included tasks, skipped tasks and conflicts.
+- **Input checks:** an invalid priority, frequency or duration is rejected, and `" High "` / `"DAILY"` are normalized.
+
+To make sure the tests are meaningful and not just passing, I broke the code on purpose (e.g. counting back-to-back tasks as conflicts, repeating daily tasks every 2 days, ignoring priority) and checked that the right test failed each time. This caught one weak test, which I then fixed.
+
+Output of a successful run:
 
 ```text
-tests/test_pawpal.py::test_mark_complete_changes_status PASSED           [  4%]
-tests/test_pawpal.py::test_add_task_increases_pet_task_count PASSED      [  9%]
-tests/test_pawpal.py::test_sort_by_time_orders_tasks_added_out_of_order PASSED [ 13%]
-tests/test_pawpal.py::test_sort_by_time_with_no_tasks_returns_empty_list PASSED [ 18%]
-tests/test_pawpal.py::test_filter_by_pet_name_ignores_case PASSED        [ 22%]
-tests/test_pawpal.py::test_filter_by_completion_status PASSED            [ 27%]
-tests/test_pawpal.py::test_filter_by_pet_and_status_together PASSED      [ 31%]
-tests/test_pawpal.py::test_filter_with_no_filters_returns_every_pets_tasks PASSED [ 36%]
-tests/test_pawpal.py::test_completing_daily_task_creates_next_day_copy PASSED [ 40%]
-tests/test_pawpal.py::test_completing_weekly_task_creates_copy_seven_days_later PASSED [ 45%]
-tests/test_pawpal.py::test_daily_task_rolls_over_to_next_month PASSED    [ 50%]
-tests/test_pawpal.py::test_completing_once_task_does_not_create_copy PASSED [ 54%]
-tests/test_pawpal.py::test_completing_same_task_twice_does_not_duplicate PASSED [ 59%]
-tests/test_pawpal.py::test_completing_task_from_another_owner_raises_error PASSED [ 63%]
-tests/test_pawpal.py::test_tasks_at_same_time_for_different_pets_conflict PASSED [ 68%]
-tests/test_pawpal.py::test_overlapping_tasks_for_same_pet_conflict PASSED [ 72%]
-tests/test_pawpal.py::test_back_to_back_tasks_do_not_conflict PASSED     [ 77%]
-tests/test_pawpal.py::test_completed_tasks_are_ignored_for_conflicts PASSED [ 81%]
-tests/test_pawpal.py::test_conflicts_on_other_days_are_excluded_when_day_given PASSED [ 86%]
-tests/test_pawpal.py::test_no_tasks_means_no_conflicts PASSED            [ 90%]
-tests/test_pawpal.py::test_daily_plan_picks_high_priority_first_within_time_limit PASSED [ 95%]
-tests/test_pawpal.py::test_daily_plan_skips_completed_tasks_and_other_days PASSED [100%]
-============================= 22 passed in 0.04s ==============================
+============================= test session starts =============================
+platform win32 -- Python 3.12.1, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\huert\Desktop\CodePathAI\Project2\ai110-module2show-pawpal-starter
+configfile: pytest.ini
+testpaths: tests
+collected 29 items
+
+tests\test_pawpal.py .............................                       [100%]
+
+============================= 29 passed in 0.06s ==============================
 ```
+
+**Confidence Level: ⭐⭐⭐⭐ (4/5)**
+
+All 29 tests pass, and they fail when the scheduling logic is deliberately broken, so I trust the core behavior: sorting, filtering, recurrence, conflicts and the daily plan. It isn't 5 stars because the Streamlit UI is only tested by hand, and the planner picks tasks highest priority first, which doesn't always find the best possible combination of tasks.
 
 ## 📐 Smarter Scheduling
 

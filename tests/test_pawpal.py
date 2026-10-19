@@ -263,3 +263,67 @@ def test_daily_plan_skips_completed_tasks_and_other_days():
     plan = scheduler.generate_daily_plan(DAY)
 
     assert [task.description for task in plan] == ["Walk"]
+
+
+def test_daily_plan_is_empty_when_nothing_fits():
+    _, rex, _, scheduler = make_owner(minutes=10)
+    rex.add_task(Task("Walk", at(8), 30, "high"))
+
+    assert scheduler.generate_daily_plan(DAY) == []
+
+
+# --- Pets with no tasks ----------------------------------------------------
+
+
+def test_pet_with_no_tasks_next_to_pet_with_tasks():
+    _, rex, milo, scheduler = make_owner()
+    rex.add_task(Task("Walk", at(8), 30, "high"))
+
+    assert milo.get_tasks() == []
+    assert scheduler.filter_tasks(pet_name="Milo") == []
+    assert [task.description for task in scheduler.sort_by_time()] == ["Walk"]
+    assert [task.description for task in scheduler.generate_daily_plan(DAY)] == ["Walk"]
+
+
+# --- Invalid input ---------------------------------------------------------
+
+
+def test_invalid_priority_is_rejected():
+    with pytest.raises(ValueError):
+        Task("Walk", at(8), 30, "urgent")
+
+
+def test_invalid_frequency_is_rejected():
+    with pytest.raises(ValueError):
+        Task("Walk", at(8), 30, "high", "monthly")
+
+
+def test_zero_duration_is_rejected():
+    with pytest.raises(ValueError):
+        Task("Walk", at(8), 0, "high")
+
+
+def test_priority_and_frequency_are_normalized():
+    task = Task("Walk", at(8), 30, " High ", "DAILY")
+
+    assert task.priority == "high"
+    assert task.frequency == "daily"
+
+
+# --- Explaining the plan ---------------------------------------------------
+
+
+def test_explain_plan_lists_included_skipped_and_conflicts():
+    _, rex, milo, scheduler = make_owner(minutes=40)
+    rex.add_task(Task("Walk", at(8), 30, "high"))
+    milo.add_task(Task("Meds", at(8), 5, "high"))
+    rex.add_task(Task("Grooming", at(15), 60, "low"))
+
+    plan = scheduler.generate_daily_plan(DAY)
+    explanation = scheduler.explain_plan(plan, DAY)
+
+    assert "35 of 40 minutes used" in explanation
+    assert "Walk (Rex, high priority, 30 min): included" in explanation
+    assert "Skipped Grooming" in explanation
+    assert "only 5 were left" in explanation
+    assert "same time" in explanation
